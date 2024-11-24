@@ -1,23 +1,36 @@
+from eodag import EODataAccessGateway
+from eodag.utils.logging import setup_logging
 import os
-from eodag import EODataAccessGateway, setup_logging
-from datetime import datetime
 
+# Set up logging
 setup_logging(0)
 
-config_file = "config.yaml"
-dag = EODataAccessGateway(config_file)
+# Initialize EODataAccessGateway
+dag = EODataAccessGateway()
 
+# Define search parameters
+product_type = "LANDSAT_C2L2"  # Landsat Collection 2 Level 2 products
+geom = {
+    "lonmin": -5.0,  # Minimum longitude
+    "latmin": 40.0,  # Minimum latitude
+    "lonmax": 5.0,   # Maximum longitude
+    "latmax": 50.0   # Maximum latitude
+}
+start, end = "2020-01-01", "2020-12-31"  # Time range
+
+# Search for products
 search_results, total_count = dag.search(
-    # productType='S2_MSI_L1C',
-    productType='LANDSAT_C2L2',
-    geom={'lonmin': 1, 'latmin': 50, 'lonmax': 2, 'latmax': 54},
-    start='2024-11-01',
-    end='2024-11-04',
-    # provider='usgs'
+    productType=product_type,
+    geom=geom,
+    start=start,
+    end=end
 )
-search_results
 
-for i in range(len(search_results)):
-    product = search_results[i]
-    product_path = product.download()
-    print(product_path)
+print(f"Found {total_count} products")
+
+# Download the first product found
+if search_results:
+    product = search_results[0]
+    dag.download(product)
+else:
+    print("No products found for the specified criteria.")
