@@ -1,0 +1,24 @@
+# Python Bytecode
+__pycache__/
+*.py[cod]
+
+# Virtual Environments
+env/
+venv/
+*.egg-info/
+
+# IDE Specific
+.vscode/
+.idea/
+*.swp
+
+# Logs and Debug Files
+*.log
+*.out
+*.err
+
+# Environment Variables
+.env
+
+# Eodag Outputs
+outputs_eodag/

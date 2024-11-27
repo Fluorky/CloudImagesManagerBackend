@@ -1,12 +1,24 @@
 from eodag import EODataAccessGateway
 from eodag.utils.logging import setup_logging
+from dotenv import load_dotenv
 import os
 
-# Set up logging
-setup_logging(0)
+# Load environment variables from .env
+load_dotenv()
+
+# Fetch credentials from .env
+USGS_USERNAME = os.getenv("USGS_USERNAME")
+USGS_PASSWORD = os.getenv("USGS_PASSWORD")
 
 # Initialize EODataAccessGateway
+setup_logging(0)
 dag = EODataAccessGateway()
+
+# Configure credentials dynamically
+dag.set_preferred_provider("usgs")  # Ensure USGS is the preferred provider
+dag.update_providers_config(
+    usgs={"credentials": {"username": USGS_USERNAME, "password": USGS_PASSWORD}}
+)
 
 # Define search parameters
 product_type = "LANDSAT_C2L2"  # Landsat Collection 2 Level 2 products
