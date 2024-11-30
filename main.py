@@ -41,23 +41,3 @@ if search_results:
 #
 else:
     logger.error("No products found for the specified criteria.")
-
-
-# else:
-#     for product in search_results:
-#         try:
-#             # Use the remote location for manual download
-#             remote_url = product.remote_location
-#             print(f"Downloading product from: {remote_url}")
-#
-#             response = requests.get(remote_url, stream=True)
-#             if response.status_code == 200:
-#                 filename = f"{product.properties['id']}.json"
-#                 with open(filename, "wb") as f:
-#                     for chunk in response.iter_content(chunk_size=8192):
-#                         f.write(chunk)
-#                 print(f"Downloaded {filename}")
-#             else:
-#                 print(f"Failed to download {product.properties['id']}: HTTP {response.status_code}")
-#         except Exception as e:
-#             print(f"Error while downloading {product.properties['id']}: {e}")
