@@ -21,4 +21,7 @@ venv/
 .env
 
 # Eodag Outputs
-outputs_eodag/
+eodag/
+eodag_workspace_download/
+venv
+config.yaml
