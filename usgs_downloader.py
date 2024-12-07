@@ -1,7 +1,11 @@
 import os
 import tarfile
+import json
 import logging
+from datetime import datetime
 from usgsxplore.api import API
+from PIL import Image
+import rasterio
 import dotenv
 
 # Configure logging
@@ -27,17 +31,84 @@ os.makedirs(extracted_dir, exist_ok=True)
 
 def extract_tar_file(input_tar_file_path, extract_to):
     """
-    Extracts a tar file to the specified directory.
+    Extracts a tar file to the specified directory and collects file metadata.
     """
+    file_metadata = []
     try:
         if tarfile.is_tarfile(input_tar_file_path):
             with tarfile.open(input_tar_file_path, 'r') as tar:
                 tar.extractall(extract_to)
                 logger.info(f"Extracted {input_tar_file_path} to {extract_to}")
+
+                # Collect metadata for each file in the archive
+                for member in tar.getmembers():
+                    file_path = os.path.join(extract_to, member.name)
+                    metadata = {
+                        "name": member.name,
+                        "size": member.size,
+                        "modified_time": datetime.fromtimestamp(member.mtime).isoformat() if member.mtime else None,
+                        "type": "directory" if member.isdir() else "file"
+                    }
+
+                    # If the file is an image, add image-specific metadata
+                    if member.isfile():
+                        image_metadata = extract_image_metadata(file_path)
+                        metadata.update(image_metadata)
+                    file_metadata.append(metadata)
         else:
             logger.warning(f"File is not a valid tar archive: {input_tar_file_path}")
     except Exception as err:
         logger.error(f"Failed to extract {input_tar_file_path}: {err}")
+    return file_metadata
+
+
+def extract_image_metadata(file_path):
+    """
+    Extracts metadata from image files using PIL and rasterio.
+    """
+    metadata = {}
+    try:
+        if file_path.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.gif')):
+            with Image.open(file_path) as img:
+                metadata = {
+                    "image_format": img.format,
+                    "image_mode": img.mode,
+                    "image_size": img.size,  # (width, height)
+                }
+        elif file_path.lower().endswith(('.tif', '.tiff')):
+            with rasterio.open(file_path) as src:
+                metadata = {
+                    "crs": src.crs.to_string() if src.crs else None,
+                    "bounds": src.bounds,
+                    "width": src.width,
+                    "height": src.height,
+                    "count": src.count,  # Number of bands
+                    "transform": src.transform,
+                    "driver": src.driver,
+                }
+    except Exception as err:
+        logger.warning(f"Failed to extract image metadata for {file_path}: {err}")
+    return metadata
+
+
+def save_metadata(entity_id, display_id, extract_path, file_metadata, metadata_path):
+    """
+    Saves metadata to a JSON file in the extracted directory.
+    """
+    metadata = {
+        "entity_id": entity_id,
+        "display_id": display_id,
+        "extraction_path": extract_path,
+        "files": file_metadata
+    }
+
+    metadata_file = os.path.join(metadata_path, f"{display_id}_metadata.json")
+    try:
+        with open(metadata_file, 'w') as f:
+            json.dump(metadata, f, indent=4)
+        logger.info(f"Saved metadata to {metadata_file}")
+    except Exception as err:
+        logger.error(f"Failed to save metadata for {display_id}: {err}")
 
 
 def search_and_download(dataset, bounding_box, date_interval, max_results):
@@ -85,7 +156,8 @@ def search_and_download(dataset, bounding_box, date_interval, max_results):
 
                 if os.path.isfile(tar_file_path):
                     os.makedirs(extract_path, exist_ok=True)
-                    extract_tar_file(tar_file_path, extract_path)
+                    file_metadata = extract_tar_file(tar_file_path, extract_path)
+                    save_metadata(entity_id, display_id, extract_path, file_metadata, extracted_dir)
                 else:
                     logger.warning(f"File {tar_file_path} not found for extraction.")
             except Exception as e:
