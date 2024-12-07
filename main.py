@@ -1,12 +1,12 @@
 import logging
 from eodag import EODataAccessGateway
-from eodag.utils.logging import setup_logging
 
-# Configure logging
-setup_logging(0)
 logger = logging.getLogger("eodag")
-logger.setLevel(logging.DEBUG)
-
+logger.setLevel(logging.INFO)
+console_handler = logging.StreamHandler()  # Create a stream handler for console output
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')  # Set the log format
+console_handler.setFormatter(formatter)  # Attach the formatter to the handler
+logger.addHandler(console_handler)  # Add the handler to the logger
 # Initialize EODataAccessGateway
 dag = EODataAccessGateway("config.yaml")
 
@@ -23,7 +23,6 @@ geom = {
     "latmax": 53.0   # Maximum latitude
 }
 start, end = "2023-01-01", "2023-01-10"  # Date range
-
 # Search for products
 logger.info(f"Searching for Landsat products using provider '{preferred_provider}'...")
 search_results = dag.search(
@@ -38,6 +37,6 @@ if search_results:
         product = search_results[i]
         product_path = product.download()
         logger.info(product_path)
-#
+        # print(product_path)
 else:
     logger.error("No products found for the specified criteria.")
