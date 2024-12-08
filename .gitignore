@@ -20,6 +20,10 @@ venv/
 # Environment Variables
 .env
 
+# Usgs Downloader Outputs
+downloads/
+extracted/
+
 # Eodag Outputs
 eodag/
 eodag_workspace_download/
