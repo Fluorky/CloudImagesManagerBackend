@@ -31,7 +31,7 @@ os.makedirs(extracted_dir, exist_ok=True)
 
 def extract_tar_file(input_tar_file_path, extract_to):
     """
-    Extracts a tar file to the specified directory and saves metadata for each file individually.
+    Extracts a tar file to the specified directory and saves metadata in a subfolder.
     """
     try:
         if tarfile.is_tarfile(input_tar_file_path):
@@ -39,7 +39,11 @@ def extract_tar_file(input_tar_file_path, extract_to):
                 tar.extractall(extract_to)
                 logger.info(f"Extracted {input_tar_file_path} to {extract_to}")
 
-                # Process each file and save metadata individually
+                # Create a subfolder for metadata
+                metadata_dir = os.path.join(extract_to, "metadata")
+                os.makedirs(metadata_dir, exist_ok=True)
+
+                # Process each file and save metadata in the subfolder
                 for member in tar.getmembers():
                     file_path = os.path.join(extract_to, member.name)
                     metadata = {
@@ -54,8 +58,8 @@ def extract_tar_file(input_tar_file_path, extract_to):
                         image_metadata = extract_image_metadata(file_path)
                         metadata.update(image_metadata)
 
-                        # Save metadata as a JSON file
-                        save_individual_metadata(file_path, metadata)
+                        # Save metadata as a JSON file in the metadata subfolder
+                        save_individual_metadata(metadata_dir, member.name, metadata)
     except Exception as err:
         logger.error(f"Failed to extract {input_tar_file_path}: {err}")
 
@@ -89,17 +93,17 @@ def extract_image_metadata(file_path):
     return metadata
 
 
-def save_individual_metadata(file_path, metadata):
+def save_individual_metadata(metadata_dir, file_name, metadata):
     """
-    Saves metadata for an individual file as a JSON file in the same directory.
+    Saves metadata for an individual file as a JSON file in the metadata directory.
     """
-    metadata_file_path = f"{file_path}.json"
+    metadata_file_path = os.path.join(metadata_dir, f"{file_name}.json")
     try:
         with open(metadata_file_path, 'w') as f:
             json.dump(metadata, f, indent=4)
-        logger.info(f"Saved metadata for {file_path} to {metadata_file_path}")
+        logger.info(f"Saved metadata for {file_name} to {metadata_file_path}")
     except Exception as err:
-        logger.error(f"Failed to save metadata for {file_path}: {err}")
+        logger.error(f"Failed to save metadata for {file_name}: {err}")
 
 
 def search_and_download(dataset, bounding_box, date_interval, max_results):
