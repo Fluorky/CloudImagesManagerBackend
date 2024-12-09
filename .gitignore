@@ -23,6 +23,7 @@ venv/
 # Usgs Downloader Outputs
 downloads/
 extracted/
+metadata/
 
 # Eodag Outputs
 eodag/
