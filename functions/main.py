@@ -1,6 +1,7 @@
 import os
 import ee
 import requests
+import json
 from flask import jsonify
 from google.cloud import storage
 from firebase_functions import https_fn
@@ -35,11 +36,15 @@ def landsat(req: https_fn.Request) -> https_fn.Response:
         # Prepare to iterate over the images
         images = collection.toList(image_count)
         saved_images = []
+        saved_metadata = []
 
         for i in range(image_count):
             # Fetch each image from the collection
             image = ee.Image(images.get(i))
             image_id = image.get('system:id').getInfo()
+
+            # Fetch metadata for the image
+            metadata = image.getInfo()
 
             vis_params = {
                 'min': 0.0,
@@ -60,15 +65,24 @@ def landsat(req: https_fn.Request) -> https_fn.Response:
             response.raise_for_status()
 
             # Save the image to Firebase Storage Emulator
-            blob_name = f'landsat_image_{i + 1}.png'
-            blob = bucket.blob(blob_name)
+            image_blob_name = f'landsat_image_{i + 1}.png'
+            blob = bucket.blob(image_blob_name)
             blob.upload_from_string(response.content, content_type='image/png')
-            saved_images.append(blob_name)
+            saved_images.append(image_blob_name)
+
+            # Save metadata as a JSON file
+            metadata_blob_name = f'landsat_image_{i + 1}_metadata.json'
+            metadata_blob = bucket.blob(metadata_blob_name)
+            metadata_blob.upload_from_string(
+                json.dumps(metadata, indent=2), content_type='application/json'
+            )
+            saved_metadata.append(metadata_blob_name)
 
         return jsonify({
-            "message": "Images saved successfully in emulator!",
+            "message": "Images and metadata saved successfully in emulator!",
             "image_count": image_count,
             "saved_images": saved_images,
+            "saved_metadata": saved_metadata,
             "region_coordinates": region.getInfo()
         })
 
