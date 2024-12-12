@@ -20,43 +20,57 @@ bucket = storage_client.bucket(bucket_name)
 @https_fn.on_request()
 def landsat(req: https_fn.Request) -> https_fn.Response:
     try:
-        # Fetch Landsat data
-        collection = ee.ImageCollection('LANDSAT/LC09/C02/T2_TOA') \
-            .filterDate('2022-01-01', '2022-02-01') \
-            .select(['B4', 'B3', 'B2'])
-
-        # Aggregate data (median)
-        image = collection.median()
-
-        # Count the number of images in the collection
-        image_count = collection.size().getInfo()
-
-        vis_params = {
-            'min': 0.0,
-            'max': 0.4,
-            'bands': ['B4', 'B3', 'B2']
-        }
-
         # Define geographic region
         region = ee.Geometry.Point([6.746, 46.529]).buffer(10000).bounds()
 
-        # Generate URL for the image thumbnail
-        url = image.getThumbURL({
-            'region': region,
-            'dimensions': 512,
-            'format': 'png',
-            **vis_params
+        # Fetch Landsat data filtered by date and region
+        collection = ee.ImageCollection('LANDSAT/LC09/C02/T2_TOA') \
+            .filterDate('2022-01-01', '2022-03-01') \
+            .filterBounds(region) \
+            .select(['B4', 'B3', 'B2'])
+
+        # Count the number of images in the collection for the region
+        image_count = collection.size().getInfo()
+
+        # Prepare to iterate over the images
+        images = collection.toList(image_count)
+        saved_images = []
+
+        for i in range(image_count):
+            # Fetch each image from the collection
+            image = ee.Image(images.get(i))
+            image_id = image.get('system:id').getInfo()
+
+            vis_params = {
+                'min': 0.0,
+                'max': 0.4,
+                'bands': ['B4', 'B3', 'B2']
+            }
+
+            # Generate URL for the image thumbnail
+            url = image.getThumbURL({
+                'region': region,
+                'dimensions': 512,
+                'format': 'png',
+                **vis_params
+            })
+
+            # Fetch the image from the URL
+            response = requests.get(url)
+            response.raise_for_status()
+
+            # Save the image to Firebase Storage Emulator
+            blob_name = f'landsat_image_{i + 1}.png'
+            blob = bucket.blob(blob_name)
+            blob.upload_from_string(response.content, content_type='image/png')
+            saved_images.append(blob_name)
+
+        return jsonify({
+            "message": "Images saved successfully in emulator!",
+            "image_count": image_count,
+            "saved_images": saved_images,
+            "region_coordinates": region.getInfo()
         })
-
-        # Fetch the image from the URL
-        response = requests.get(url)
-        response.raise_for_status()
-
-        # Save the image to Firebase Storage Emulator
-        blob = bucket.blob('landsat_image.png')
-        blob.upload_from_string(response.content, content_type='image/png')
-
-        return jsonify({"message": "Image saved successfully in emulator!", "image_count": image_count})
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
