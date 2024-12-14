@@ -41,10 +41,15 @@ def landsat(req: https_fn.Request) -> https_fn.Response:
         # Get the number of images in the collection
         image_count = collection.size().getInfo()
 
-        # Iterate through images in the collection
-        images = collection.toList(image_count)
+        # Prepare folder names
+        images_folder = "landsat_images/"
+        metadata_folder = "landsat_metadata/"
+
         saved_images = []
         saved_metadata = []
+
+        # Iterate through images in the collection
+        images = collection.toList(image_count)
 
         for i in range(image_count):
             # Retrieve the image
@@ -81,14 +86,14 @@ def landsat(req: https_fn.Request) -> https_fn.Response:
             response = requests.get(url)
             response.raise_for_status()
 
-            # Save the image to Firebase Storage Emulator
-            image_blob_name = f'landsat_image_{i + 1}.png'
+            # Save the image to Firebase Storage Emulator in the images folder
+            image_blob_name = f'{images_folder}landsat_image_{i + 1}.png'
             blob = bucket.blob(image_blob_name)
             blob.upload_from_string(response.content, content_type='image/png')
             saved_images.append(image_blob_name)
 
-            # Save metadata as a JSON file
-            metadata_blob_name = f'landsat_image_{i + 1}_metadata.json'
+            # Save metadata as a JSON file in the metadata folder
+            metadata_blob_name = f'{metadata_folder}landsat_image_{i + 1}_metadata.json'
             metadata_blob = bucket.blob(metadata_blob_name)
             metadata_blob.upload_from_string(
                 json.dumps(metadata, indent=2), content_type='application/json'
@@ -96,7 +101,7 @@ def landsat(req: https_fn.Request) -> https_fn.Response:
             saved_metadata.append(metadata_blob_name)
 
         return jsonify({
-            "message": "Images and metadata successfully saved to the emulator!",
+            "message": "Images and metadata successfully saved to separate folders in the emulator!",
             "image_count": image_count,
             "saved_images": saved_images,
             "saved_metadata": saved_metadata
