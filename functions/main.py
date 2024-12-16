@@ -87,13 +87,13 @@ def landsat(req: https_fn.Request) -> https_fn.Response:
             response.raise_for_status()
 
             # Save the image to Firebase Storage Emulator in the images folder
-            image_blob_name = f'{images_folder}landsat_image_{i + 1}.png'
+            image_blob_name = f'{images_folder}landsat_image_{raw_metadata.get("id").split("/")[-1]}.png'
             blob = bucket.blob(image_blob_name)
             blob.upload_from_string(response.content, content_type='image/png')
             saved_images.append(image_blob_name)
 
             # Save metadata as a JSON file in the metadata folder
-            metadata_blob_name = f'{metadata_folder}landsat_image_{i + 1}_metadata.json'
+            metadata_blob_name = f'{metadata_folder}landsat_image_{raw_metadata.get("id").split("/")[-1]}_metadata.json'
             metadata_blob = bucket.blob(metadata_blob_name)
             metadata_blob.upload_from_string(
                 json.dumps(metadata, indent=2), content_type='application/json'
