@@ -44,6 +44,11 @@ def landsat(req: https_fn.Request) -> https_fn.Response:
         # Prepare folder names
         images_folder = "landsat_images/"
         metadata_folder = "landsat_metadata/"
+        changed_metadata_folder = "landsat_metadata_changed/"
+
+        # Create an empty folder for changed metadata
+        empty_blob = bucket.blob(f"{changed_metadata_folder}/")
+        empty_blob.upload_from_string("", content_type="application/x-www-form-urlencoded;charset=UTF-8")
 
         saved_images = []
         saved_metadata = []
@@ -54,18 +59,37 @@ def landsat(req: https_fn.Request) -> https_fn.Response:
         for i in range(image_count):
             # Retrieve the image
             image = ee.Image(images.get(i))
-            image_id = image.get('system:id').getInfo()
-
-            # Retrieve image metadata
             raw_metadata = image.getInfo()
+            image_id = raw_metadata.get("id").split("/")[-1]
+
+            # Retrieve additional metadata
+            properties = raw_metadata.get("properties", {})
+            acquisition_date = properties.get("DATE_ACQUIRED", "Unknown")
+            location = region_coordinates
+            size = {
+                "width": properties.get("REFLECTIVE_SAMPLES", "Unknown"),
+                "height": properties.get("REFLECTIVE_LINES", "Unknown")
+            }
 
             # Structure metadata
             metadata = {
                 "type": "Image",
+                "id": image_id,
+                "location": {
+                    "coordinates": location,
+                    "region_radius": region_radius
+                },
+                "size": size,
+                "acquisition_date": acquisition_date,
                 "bands": raw_metadata.get("bands", []),
-                "version": raw_metadata.get("version"),
-                "id": raw_metadata.get("id"),
-                "properties": raw_metadata.get("properties", {})
+                "properties": properties,
+                "brightness": "auto",
+                "contrast": "auto",
+                "saturation": "auto",
+                "grayscale": False,
+                "rotate": 0,
+                "flip": {"horizontal": False, "vertical": False},
+                "zoom": 1.0
             }
 
             vis_params = {
@@ -87,24 +111,54 @@ def landsat(req: https_fn.Request) -> https_fn.Response:
             response.raise_for_status()
 
             # Save the image to Firebase Storage Emulator in the images folder
-            image_blob_name = f'{images_folder}landsat_image_{raw_metadata.get("id").split("/")[-1]}.png'
+            image_blob_name = f'{images_folder}{image_id}.png'
             blob = bucket.blob(image_blob_name)
             blob.upload_from_string(response.content, content_type='image/png')
             saved_images.append(image_blob_name)
 
             # Save metadata as a JSON file in the metadata folder
-            metadata_blob_name = f'{metadata_folder}landsat_image_{raw_metadata.get("id").split("/")[-1]}_metadata.json'
+            metadata_blob_name = f'{metadata_folder}{image_id}_metadata.json'
             metadata_blob = bucket.blob(metadata_blob_name)
             metadata_blob.upload_from_string(
                 json.dumps(metadata, indent=2), content_type='application/json'
             )
             saved_metadata.append(metadata_blob_name)
 
+        # Generate manifest_metadata.json
+        manifest_metadata = {
+            "description": "Metadata structure for Landsat images",
+            "fields": {
+                "type": "Type of data (e.g., Image)",
+                "id": "Unique identifier for the image",
+                "location": "Geographic location and region radius",
+                "size": "Dimensions of the image (width and height)",
+                "acquisition_date": "Date the image was acquired",
+                "bands": "Information about the image bands",
+                "properties": "Additional properties about the image",
+                "brightness": "Brightness adjustment (default: auto)",
+                "contrast": "Contrast adjustment (default: auto)",
+                "saturation": "Saturation adjustment (default: auto)",
+                "grayscale": "Boolean indicating if the image is grayscale (default: false)",
+                "rotate": "Rotation angle in degrees (default: 0)",
+                "flip": {
+                    "horizontal": "Boolean indicating horizontal flip (default: false)",
+                    "vertical": "Boolean indicating vertical flip (default: false)"
+                },
+                "zoom": "Zoom factor (default: 1.0)"
+            }
+        }
+
+        manifest_blob = bucket.blob("manifest_metadata.json")
+        manifest_blob.upload_from_string(
+            json.dumps(manifest_metadata, indent=2), content_type="application/json"
+        )
+
         return jsonify({
-            "message": "Images and metadata successfully saved to separate folders in the emulator!",
+            "message": "Images, metadata, and manifest saved successfully in emulator!",
             "image_count": image_count,
             "saved_images": saved_images,
-            "saved_metadata": saved_metadata
+            "saved_metadata": saved_metadata,
+            "changed_metadata_folder": changed_metadata_folder
         })
 
     except Exception as e:
