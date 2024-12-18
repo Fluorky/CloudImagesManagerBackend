@@ -3,20 +3,57 @@ import ee
 import requests
 import json
 from firebase_functions import https_fn
-from google.cloud import storage
+from google.cloud import storage, firestore
 
 # Initialize Google Earth Engine
 ee.Initialize()
 
 # Configure Google Cloud Storage
-BUCKET_NAME = "cloudimagemanager.firebasestorage.app"  # Replace with your actual bucket name
+os.environ["STORAGE_EMULATOR_HOST"] = "http://127.0.0.1:9199"
+BUCKET_NAME = "cloudimagemanager.appspot.com"
 storage_client = storage.Client()
 bucket = storage_client.bucket(BUCKET_NAME)
+
+# Configure Firestore Emulator
+os.environ["FIRESTORE_EMULATOR_HOST"] = "localhost:8081"
+firestore_client = firestore.Client()
+
+
+def sanitize_firestore_data(data):
+    """
+    Sanitize data to ensure compatibility with Firestore.
+    This includes flattening nested arrays and removing unsupported types.
+    """
+    if isinstance(data, list):
+        flat_list = []
+        for item in data:
+            if isinstance(item, list):
+                flat_list.extend(sanitize_firestore_data(item))
+            else:
+                flat_list.append(item)
+        return flat_list
+    elif isinstance(data, dict):
+        sanitized_dict = {}
+        for key, value in data.items():
+            sanitized_dict[key] = sanitize_firestore_data(value)
+        return sanitized_dict
+    elif isinstance(data, (str, int, float, bool)):
+        return data
+    else:
+        # Unsupported type for Firestore; return as string for logging
+        return str(data)
 
 
 @https_fn.on_request()
 def landsat(req: https_fn.Request) -> https_fn.Response:
     try:
+        # Verify content type
+        if req.headers.get("Content-Type") != "application/json":
+            return https_fn.Response(
+                json.dumps({"error": "Content-Type must be 'application/json'"}),
+                status=415,
+            )
+
         # Retrieve POST data
         data = req.get_json()
         collection_name = data.get("collection", "LANDSAT/LC09/C02/T2_TOA")
@@ -29,124 +66,89 @@ def landsat(req: https_fn.Request) -> https_fn.Response:
         region = ee.Geometry.Point(region_coordinates).buffer(region_radius).bounds()
 
         # Fetch Landsat data
+        print("Fetching Landsat data...")
         collection = (
             ee.ImageCollection(collection_name)
             .filterDate(start_date, end_date)
             .filterBounds(region)
             .select(["B4", "B3", "B2"])
         )
-
-        # Get image count
         image_count = collection.size().getInfo()
+        print(f"Total images: {image_count}")
+
         if image_count == 0:
             return https_fn.Response(json.dumps({"message": "No images found"}), status=404)
 
         # Folder paths
         images_folder = "landsat_images/"
-        metadata_folder = "landsat_metadata/"
-        changed_metadata_folder = "landsat_metadata_changed/"
-
-        # Create empty folder for changed metadata
-        empty_blob = bucket.blob(f"{changed_metadata_folder}/")
-        empty_blob.upload_from_string("", content_type="application/x-www-form-urlencoded;charset=UTF-8")
+        batch_size = 5  # Reduced batch size for better memory management
 
         saved_images = []
-        saved_metadata = []
+        saved_metadata_ids = []
 
-        # Process images
+        # Process images in batches
         images = collection.toList(image_count)
-        for i in range(image_count):
-            image = ee.Image(images.get(i))
-            raw_metadata = image.getInfo()
-            image_id = raw_metadata.get("id").split("/")[-1]
+        for i in range(0, image_count, batch_size):
+            print(f"Processing batch {i // batch_size + 1}...")
+            batch = images.slice(i, i + batch_size)
+            for j in range(batch.size().getInfo()):
+                image = ee.Image(batch.get(j))
+                raw_metadata = image.getInfo()
+                image_id = raw_metadata.get("id").split("/")[-1]
 
-            # Additional metadata extraction
-            properties = raw_metadata.get("properties", {})
-            acquisition_date = properties.get("DATE_ACQUIRED", "Unknown")
-            size = {
-                "width": properties.get("REFLECTIVE_SAMPLES", "Unknown"),
-                "height": properties.get("REFLECTIVE_LINES", "Unknown"),
-            }
-            location = region_coordinates
+                # Extract and structure metadata
+                properties = raw_metadata.get("properties", {})
+                bands = sanitize_firestore_data(raw_metadata.get("bands", []))
 
-            # Structure metadata
-            metadata = {
-                "type": "Image",
-                "id": image_id,
-                "location": {
-                    "coordinates": location,
-                    "region_radius": region_radius
-                },
-                "size": size,
-                "acquisition_date": acquisition_date,
-                "bands": raw_metadata.get("bands", []),
-                "properties": properties,
-                "brightness": "auto",
-                "contrast": "auto",
-                "saturation": "auto",
-                "grayscale": False,
-                "rotate": 0,
-                "flip": {"horizontal": False, "vertical": False},
-                "zoom": 1.0
-            }
+                # Prepare metadata
+                metadata = {
+                    "type": "Image",
+                    "id": image_id,
+                    "location": {"coordinates": region_coordinates, "region_radius": region_radius},
+                    "size": {
+                        "width": properties.get("REFLECTIVE_SAMPLES", "Unknown"),
+                        "height": properties.get("REFLECTIVE_LINES", "Unknown"),
+                    },
+                    "acquisition_date": properties.get("DATE_ACQUIRED", "Unknown"),
+                    "bands": bands,
+                    "properties": sanitize_firestore_data(properties),
+                }
 
-            # Generate thumbnail URL
-            vis_params = {"min": 0.0, "max": 0.4, "bands": ["B4", "B3", "B2"]}
-            url = image.getThumbURL({"region": region, "dimensions": 512, "format": "png", **vis_params})
+                # Debug log: Print metadata before saving
+                print("Raw metadata before saving to Firestore:")
+                print(json.dumps(metadata, indent=2))
 
-            # Download and save image
-            response = requests.get(url)
-            response.raise_for_status()
-            image_blob_name = f"{images_folder}{image_id}.png"
-            bucket.blob(image_blob_name).upload_from_string(response.content, content_type="image/png")
-            saved_images.append(image_blob_name)
+                # Sanitize metadata for Firestore
+                metadata = sanitize_firestore_data(metadata)
 
-            # Save metadata
-            metadata_blob_name = f"{metadata_folder}{image_id}_metadata.json"
-            bucket.blob(metadata_blob_name).upload_from_string(
-                json.dumps(metadata, indent=2), content_type="application/json"
-            )
-            saved_metadata.append(metadata_blob_name)
+                # Save metadata to Firestore
+                firestore_client.collection("landsat_metadata").document(image_id).set(metadata)
+                saved_metadata_ids.append(image_id)
 
-        # Generate manifest_metadata.json
-        manifest_metadata = {
-            "description": "Metadata structure for Landsat images",
-            "fields": {
-                "type": "Type of data (e.g., Image)",
-                "id": "Unique identifier for the image",
-                "location": "Geographic location and region radius",
-                "size": "Dimensions of the image (width and height)",
-                "acquisition_date": "Date the image was acquired",
-                "bands": "Information about the image bands",
-                "properties": "Additional properties about the image",
-                "brightness": "Brightness adjustment (default: auto)",
-                "contrast": "Contrast adjustment (default: auto)",
-                "saturation": "Saturation adjustment (default: auto)",
-                "grayscale": "Boolean indicating if the image is grayscale (default: false)",
-                "rotate": "Rotation angle in degrees (default: 0)",
-                "flip": {
-                    "horizontal": "Boolean indicating horizontal flip (default: false)",
-                    "vertical": "Boolean indicating vertical flip (default: false)"
-                },
-                "zoom": "Zoom factor (default: 1.0)"
-            }
-        }
-        manifest_blob = bucket.blob("manifest_metadata.json")
-        manifest_blob.upload_from_string(
-            json.dumps(manifest_metadata, indent=2), content_type="application/json"
-        )
+                # Generate thumbnail URL
+                vis_params = {"min": 0.0, "max": 0.4, "bands": ["B4", "B3", "B2"]}
+                url = image.getThumbURL({"region": region, "dimensions": 256, "format": "png", **vis_params})
+
+                # Download and save image
+                response = requests.get(url)
+                response.raise_for_status()
+                image_blob_name = f"{images_folder}{image_id}.png"
+                bucket.blob(image_blob_name).upload_from_string(response.content, content_type="image/png")
+                saved_images.append(image_blob_name)
+
+            print(f"Batch {i // batch_size + 1} processed.")
 
         # Return successful response
         return https_fn.Response(
             json.dumps({
-                "message": "Images, metadata, and manifest saved successfully!",
+                "message": "Images saved in Storage, metadata saved in Firestore!",
                 "image_count": image_count,
                 "saved_images": saved_images,
-                "saved_metadata": saved_metadata,
-                "changed_metadata_folder": changed_metadata_folder
+                "saved_metadata_ids": saved_metadata_ids
             }),
             status=200,
         )
 
     except Exception as e:
+        print(f"Error: {str(e)}")
         return https_fn.Response(json.dumps({"error": str(e)}), status=500)
