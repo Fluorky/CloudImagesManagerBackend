@@ -3,20 +3,20 @@ import ee
 import requests
 import json
 from firebase_functions import https_fn
-from google.cloud import storage, firestore
+from google.cloud import firestore, storage
 
 # Initialize Google Earth Engine
 ee.Initialize()
+
+# Configure Firestore Emulator
+os.environ["FIRESTORE_EMULATOR_HOST"] = "localhost:8081"
+firestore_client = firestore.Client()
 
 # Configure Google Cloud Storage
 os.environ["STORAGE_EMULATOR_HOST"] = "http://127.0.0.1:9199"
 BUCKET_NAME = "cloudimagemanager.appspot.com"
 storage_client = storage.Client()
 bucket = storage_client.bucket(BUCKET_NAME)
-
-# Configure Firestore Emulator
-os.environ["FIRESTORE_EMULATOR_HOST"] = "localhost:8081"
-firestore_client = firestore.Client()
 
 
 def flatten_data(data):
@@ -58,15 +58,6 @@ def landsat(req: https_fn.Request) -> https_fn.Response:
         image_count = collection.size().getInfo()
         if image_count == 0:
             return https_fn.Response(json.dumps({"message": "No images found"}), status=404)
-
-        # Folder paths
-        images_folder = "landsat_images/"
-        metadata_folder = "landsat_metadata/"
-        changed_metadata_folder = "landsat_metadata_changed/"
-
-        # Ensure the folder for changed metadata exists
-        empty_blob = bucket.blob(f"{changed_metadata_folder}/")
-        empty_blob.upload_from_string("", content_type="application/x-www-form-urlencoded;charset=UTF-8")
 
         saved_images = []
         saved_metadata = []
@@ -116,35 +107,25 @@ def landsat(req: https_fn.Request) -> https_fn.Response:
                 "zoom": 1.0
             }
 
-            # Print metadata for debugging
-            print("Saving metadata:")
-            print(json.dumps(metadata, indent=2))
-
             # Save metadata in Firestore (original)
             firestore_client.collection("landsat_metadata").document(image_id).set(metadata)
+            saved_metadata.append(image_id)
 
             # Generate thumbnail URL
             vis_params = {"min": 0.0, "max": 0.4, "bands": ["B4", "B3", "B2"]}
             url = image.getThumbURL({"region": region, "dimensions": 512, "format": "png", **vis_params})
 
-            # Download and save image
+            # Download and save image in Cloud Storage
             response = requests.get(url)
             response.raise_for_status()
-            image_blob_name = f"{images_folder}{image_id}.png"
+            image_blob_name = f"landsat_images/{image_id}.png"
             bucket.blob(image_blob_name).upload_from_string(response.content, content_type="image/png")
             saved_images.append(image_blob_name)
-
-            # Save metadata in Cloud Storage
-            metadata_blob_name = f"{metadata_folder}{image_id}_metadata.json"
-            bucket.blob(metadata_blob_name).upload_from_string(
-                json.dumps(metadata, indent=2), content_type="application/json"
-            )
-            saved_metadata.append(metadata_blob_name)
 
         # Create an empty collection `landsat_metadata_changed`
         firestore_client.collection("landsat_metadata_changed").document("placeholder").set({})
 
-        # Generate manifest_metadata.json
+        # Generate and save manifest_metadata.json in Cloud Storage
         manifest_metadata = {
             "description": "Metadata structure for Landsat images",
             "fields": {
@@ -175,11 +156,11 @@ def landsat(req: https_fn.Request) -> https_fn.Response:
         # Return successful response
         return https_fn.Response(
             json.dumps({
-                "message": "Images, metadata, and manifest saved successfully!",
+                "message": "Images and metadata processed successfully!",
                 "image_count": image_count,
                 "saved_images": saved_images,
                 "saved_metadata": saved_metadata,
-                "changed_metadata_folder": changed_metadata_folder
+                "manifest_metadata": "manifest_metadata.json saved to Cloud Storage."
             }),
             status=200,
         )
