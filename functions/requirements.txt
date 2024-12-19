@@ -1,7 +1,6 @@
 firebase_functions~=0.1.0
 firebase-admin==6.2.0
-usgsxplore==1.0.1
 python-dotenv==1.0.1
 requests==2.32.3
-logging==0.4.9.6
-google-cloud-firestore
+google-cloud-firestore== 2.19.0
+earthengine-api==1.4.3
