@@ -2,6 +2,7 @@ import os
 import ee
 import requests
 import json
+from datetime import datetime, timedelta
 from firebase_functions import https_fn
 from google.cloud import firestore, storage
 
@@ -15,37 +16,59 @@ firestore_client = firestore.Client()
 # Configure Google Cloud Storage
 os.environ["STORAGE_EMULATOR_HOST"] = "http://127.0.0.1:9199"
 BUCKET_NAME = "cloudimagemanager.appspot.com"
+CONFIG_PATH = "config/region/config.json"  # Path to config file in Cloud Storage
 storage_client = storage.Client()
 bucket = storage_client.bucket(BUCKET_NAME)
+
+
+def get_region_from_cloud_storage():
+    """Fetch region data from Cloud Storage."""
+    try:
+        blob = bucket.blob(CONFIG_PATH)
+        if not blob.exists():
+            raise ValueError(f"Config file not found at gs://{BUCKET_NAME}/{CONFIG_PATH}")
+        config_data = blob.download_as_text()
+        config = json.loads(config_data)
+        return config.get("coordinates", [6.746, 46.529]), config.get("radius", 10000)
+    except json.JSONDecodeError:
+        raise ValueError("Invalid JSON format in config file.")
+    except Exception as e:
+        raise ValueError(f"Error fetching config: {str(e)}")
 
 
 def flatten_data(data):
     """Recursively flatten any nested arrays or dictionaries in Firestore data."""
     if isinstance(data, list):
-        # Convert nested lists to strings or flatten
         return [",".join(map(str, flatten_data(item))) if isinstance(item, list) else flatten_data(item) for item in data]
     elif isinstance(data, dict):
-        # Process nested dictionaries
         return {key: flatten_data(value) for key, value in data.items()}
     else:
-        # Return primitive types as-is
         return data
 
 
 @https_fn.on_request()
-def landsat(req: https_fn.Request) -> https_fn.Response:
+def landsat_cron(req: https_fn.Request) -> https_fn.Response:
     try:
-        # Retrieve POST data
-        data = req.get_json()
-        collection_name = data.get("collection", "LANDSAT/LC09/C02/T2_TOA")
-        start_date = data.get("start_date", "2022-01-01")
-        end_date = data.get("end_date", "2022-02-01")
-        region_coordinates = data.get("region", [6.746, 46.529])
-        region_radius = data.get("radius", 10000)
+        # Get parameters from the request or set defaults
+        collection_name = req.get_json().get("collection", "LANDSAT/LC09/C02/T2_TOA")
+
+        # Define current date and calculate date range
+        today = datetime.utcnow()
+        quarter = timedelta(days=700)  # One quarter
+        week = timedelta(days=60)
+
+        end_date = (today - quarter).date().isoformat()  # Today - quarter
+        start_date = (today - quarter - week).date().isoformat()  # Today - week - quarter
+        print(end_date)
+        print(start_date)
+
+        # Fetch region configuration from Cloud Storage
+        region_coordinates, region_radius = get_region_from_cloud_storage()
 
         # Define geographic region
         region = ee.Geometry.Point(region_coordinates).buffer(region_radius).bounds()
-
+        print(f"Region coordinates: {region_coordinates}")
+        print(f"Collection_name{collection_name}")
         # Fetch Landsat data
         collection = (
             ee.ImageCollection(collection_name)
@@ -86,7 +109,7 @@ def landsat(req: https_fn.Request) -> https_fn.Response:
             # Process properties
             properties = flatten_data(properties)
 
-            # Original metadata
+            # Format metadata
             metadata = {
                 "type": "Image",
                 "id": image_id,
@@ -107,7 +130,7 @@ def landsat(req: https_fn.Request) -> https_fn.Response:
                 "zoom": 1.0
             }
 
-            # Save metadata in Firestore (original)
+            # Save metadata in Firestore
             firestore_client.collection("landsat_metadata").document(image_id).set(metadata)
             saved_metadata.append(image_id)
 
@@ -122,12 +145,12 @@ def landsat(req: https_fn.Request) -> https_fn.Response:
             bucket.blob(image_blob_name).upload_from_string(response.content, content_type="image/png")
             saved_images.append(image_blob_name)
 
-        # Create an empty collection `landsat_metadata_changed`
+        # Create empty collection `landsat_metadata_changed` in Firestore
         firestore_client.collection("landsat_metadata_changed").document("placeholder").set({})
 
         # Generate and save manifest_metadata.json in Cloud Storage
         manifest_metadata = {
-            "description": "Metadata structure for Landsat images",
+            "description": f"Metadata structure for Landsat images from {collection_name}",
             "fields": {
                 "type": "Type of data (e.g., Image)",
                 "id": "Unique identifier for the image",
@@ -148,7 +171,7 @@ def landsat(req: https_fn.Request) -> https_fn.Response:
                 "zoom": "Zoom factor (default: 1.0)"
             }
         }
-        manifest_blob = bucket.blob("manifest_metadata.json")
+        manifest_blob = bucket.blob(f"{collection_name.replace("/", "_")}_manifest_metadata.json")
         manifest_blob.upload_from_string(
             json.dumps(manifest_metadata, indent=2), content_type="application/json"
         )
@@ -156,11 +179,9 @@ def landsat(req: https_fn.Request) -> https_fn.Response:
         # Return successful response
         return https_fn.Response(
             json.dumps({
-                "message": "Images and metadata processed successfully!",
+                "message": f"Cron job executed successfully for collection {collection_name}!",
                 "image_count": image_count,
                 "saved_images": saved_images,
-                "saved_metadata": saved_metadata,
-                "manifest_metadata": "manifest_metadata.json saved to Cloud Storage."
             }),
             status=200,
         )
