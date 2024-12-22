@@ -46,6 +46,22 @@ def flatten_data(data):
         return data
 
 
+def log_error_to_firestore(error_message):
+    """Log errors with timestamp to Firestore."""
+    if "415" in error_message:
+        # Skip logging 415 errors
+        print(f"Ignoring 415 error: {error_message}")
+        return
+    try:
+        error_log = {
+            "timestamp": datetime.utcnow().isoformat(),
+            "error_message": error_message
+        }
+        firestore_client.collection("error_logs").add(error_log)
+    except Exception as e:
+        print(f"Failed to log error to Firestore: {e}")
+
+
 @https_fn.on_request()
 def landsat_cron(req: https_fn.Request) -> https_fn.Response:
     try:
@@ -54,7 +70,8 @@ def landsat_cron(req: https_fn.Request) -> https_fn.Response:
 
         # Define current date and calculate date range
         today = datetime.utcnow()
-        quarter = timedelta(days=700)  # One quarter
+        quarter = timedelta(days=7)  # One quarter
+        # quarter = timedelta(days=700)  # One quarter
         week = timedelta(days=60)
 
         end_date = (today - quarter).date().isoformat()  # Today - quarter
@@ -80,6 +97,7 @@ def landsat_cron(req: https_fn.Request) -> https_fn.Response:
         # Get image count
         image_count = collection.size().getInfo()
         if image_count == 0:
+            log_error_to_firestore("No images found")
             return https_fn.Response(json.dumps({"message": "No images found"}), status=404)
 
         saved_images = []
@@ -187,4 +205,5 @@ def landsat_cron(req: https_fn.Request) -> https_fn.Response:
         )
 
     except Exception as e:
+        log_error_to_firestore(str(e))
         return https_fn.Response(json.dumps({"error": str(e)}), status=500)
