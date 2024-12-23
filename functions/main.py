@@ -70,12 +70,11 @@ def landsat_cron(req: https_fn.Request) -> https_fn.Response:
 
         # Define current date and calculate date range
         today = datetime.utcnow()
-        quarter = timedelta(days=7)  # One quarter
-        # quarter = timedelta(days=700)  # One quarter
-        week = timedelta(days=60)
+        two_years = timedelta(days=730)  # Two years
+        quarter = timedelta(days=90)  # One quarter
 
-        end_date = (today - quarter).date().isoformat()  # Today - quarter
-        start_date = (today - quarter - week).date().isoformat()  # Today - week - quarter
+        end_date = (today - two_years).date().isoformat()  # Today - quarter
+        start_date = (today - two_years - quarter).date().isoformat()  # Today - two years - quarter
         print(end_date)
         print(start_date)
 
