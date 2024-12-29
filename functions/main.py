@@ -5,18 +5,40 @@ import json
 from datetime import datetime, timedelta
 from firebase_functions import https_fn
 from google.cloud import firestore, storage
+from dotenv import load_dotenv
+
+# Load environment variables from .env
+load_dotenv()
 
 # Initialize Google Earth Engine
 ee.Initialize()
 
-# Configure Firestore Emulator
-os.environ["FIRESTORE_EMULATOR_HOST"] = "localhost:8081"
+# # Configure Firestore Emulator
+# # os.environ["FIRESTORE_EMULATOR_HOST"] = "localhost:8081" #debug local
+# firestore_client = firestore.Client()
+#
+# # Configure Google Cloud Storage
+#
+# # os.environ["STORAGE_EMULATOR_HOST"] = "http://127.0.0.1:9199" # debug local
+# # BUCKET_NAME = "cloudimagemanager.appspot.com" # debug local
+#
+# BUCKET_NAME = "cloudimagemanager.firebasestorage.app"
+# CONFIG_PATH = "config/region/config.json"  # Path to config file in Cloud Storage
+# storage_client = storage.Client()
+# bucket = storage_client.bucket(BUCKET_NAME)
+
+# Firestore emulator (for local debugging)
+if "FIRESTORE_EMULATOR_HOST" in os.environ:
+    os.environ["FIRESTORE_EMULATOR_HOST"] = os.getenv("FIRESTORE_EMULATOR_HOST")
 firestore_client = firestore.Client()
 
-# Configure Google Cloud Storage
-os.environ["STORAGE_EMULATOR_HOST"] = "http://127.0.0.1:9199"
-BUCKET_NAME = "cloudimagemanager.appspot.com"
-CONFIG_PATH = "config/region/config.json"  # Path to config file in Cloud Storage
+# Storage emulator (for local debugging)
+if "STORAGE_EMULATOR_HOST" in os.environ:
+    os.environ["STORAGE_EMULATOR_HOST"] = os.getenv("STORAGE_EMULATOR_HOST")
+
+# Cloud Storage bucket and configuration path from .env
+BUCKET_NAME = os.getenv("BUCKET_NAME")
+CONFIG_PATH = os.getenv("CONFIG_PATH")
 storage_client = storage.Client()
 bucket = storage_client.bucket(BUCKET_NAME)
 
