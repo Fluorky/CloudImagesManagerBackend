@@ -13,19 +13,7 @@ load_dotenv()
 # Initialize Google Earth Engine
 ee.Initialize()
 
-# # Configure Firestore Emulator
-# # os.environ["FIRESTORE_EMULATOR_HOST"] = "localhost:8081" #debug local
-# firestore_client = firestore.Client()
-#
-# # Configure Google Cloud Storage
-#
-# # os.environ["STORAGE_EMULATOR_HOST"] = "http://127.0.0.1:9199" # debug local
-# # BUCKET_NAME = "cloudimagemanager.appspot.com" # debug local
-#
-# BUCKET_NAME = "cloudimagemanager.firebasestorage.app"
-# CONFIG_PATH = "config/region/config.json"  # Path to config file in Cloud Storage
-# storage_client = storage.Client()
-# bucket = storage_client.bucket(BUCKET_NAME)
+# Emulators Config
 
 # Firestore emulator (for local debugging)
 if "FIRESTORE_EMULATOR_HOST" in os.environ:
