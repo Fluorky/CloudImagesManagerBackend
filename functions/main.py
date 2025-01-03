@@ -85,16 +85,12 @@ def landsat_cron(req: https_fn.Request) -> https_fn.Response:
 
         end_date = (today - two_years).date().isoformat()  # Today - quarter
         start_date = (today - two_years - quarter).date().isoformat()  # Today - two years - quarter
-        print(end_date)
-        print(start_date)
 
         # Fetch region configuration from Cloud Storage
         region_coordinates, region_radius = get_region_from_cloud_storage()
 
         # Define geographic region
         region = ee.Geometry.Point(region_coordinates).buffer(region_radius).bounds()
-        print(f"Region coordinates: {region_coordinates}")
-        print(f"Collection_name{collection_name}")
         # Fetch Landsat data
         collection = (
             ee.ImageCollection(collection_name)
