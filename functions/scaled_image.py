@@ -18,7 +18,8 @@ BUCKET_NAME = os.getenv("BUCKET_NAME")
 @https_fn.on_request()
 def get_scaled_image(request: https_fn.Request) -> https_fn.Response:
     """
-    Firebase Function endpoint to fetch and scale an image from Google Cloud Storage to HD resolution (720p).
+    Firebase Function endpoint to fetch an image from Google Cloud Storage,
+    scale it to HD resolution (720p), and save the scaled image back to the bucket.
     """
     try:
         # Parse the JSON request
@@ -42,9 +43,9 @@ def get_scaled_image(request: https_fn.Request) -> https_fn.Response:
 
         # Connect to the bucket and fetch the image
         bucket = storage_client.bucket(BUCKET_NAME)
-        blob = bucket.blob(f"landsat_images/{image_id}.png")
+        source_blob = bucket.blob(f"landsat_images/{image_id}.png")
 
-        if not blob.exists():
+        if not source_blob.exists():
             return https_fn.Response(
                 json.dumps({"error": f"Image {image_id}.png not found in bucket {BUCKET_NAME}"}),
                 status=404,
@@ -52,7 +53,7 @@ def get_scaled_image(request: https_fn.Request) -> https_fn.Response:
             )
 
         # Download the image as binary data
-        image_data = blob.download_as_bytes()
+        image_data = source_blob.download_as_bytes()
 
         # Open the image using Pillow
         with Image.open(io.BytesIO(image_data)) as img:
@@ -65,14 +66,21 @@ def get_scaled_image(request: https_fn.Request) -> https_fn.Response:
             img_resized.save(output, format="PNG")
             output.seek(0)
 
-            # Return the image as a response
+            # Upload the scaled image back to Cloud Storage
+            scaled_blob_name = f"scaled_images/{image_id}_hd.png"
+            scaled_blob = bucket.blob(scaled_blob_name)
+            scaled_blob.upload_from_file(output, content_type="image/png")
+
+            # Generate a public URL for the scaled image
+            scaled_image_url = scaled_blob.public_url
+
             return https_fn.Response(
-                output.getvalue(),
+                json.dumps({
+                    "message": "Image scaled successfully",
+                    "scaled_image_url": scaled_image_url
+                }),
                 status=200,
-                mimetype="image/png",
-                headers={
-                    "Content-Disposition": f"attachment; filename={image_id}_hd.png"
-                }
+                mimetype="application/json"
             )
 
     except Exception as e:
