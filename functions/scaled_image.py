@@ -15,6 +15,7 @@ storage_client = storage.Client()
 # Fetch the bucket name from the .env file
 BUCKET_NAME = os.getenv("BUCKET_NAME")
 
+
 @https_fn.on_request()
 def get_scaled_image(request: https_fn.Request) -> https_fn.Response:
     """
