@@ -3,8 +3,6 @@ from landsat_cron import landsat_cron
 from config import firestore_client, bucket
 from scaled_image import get_scaled_images
 
-# TODO: restore creating empty folder in firestore
-
 
 def initialize_application():
     """
