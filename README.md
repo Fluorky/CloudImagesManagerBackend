@@ -2,6 +2,7 @@
 # CloudImageBatcher
 
 CloudImageBatcher automates the processing of satellite images using Google Cloud Functions, integrating with Google Earth Engine, Firestore, and Cloud Storage. The tool simplifies the workflow of fetching, processing, and saving image metadata, ensuring scalability and efficiency.
+This is part of [cloud image manager app](https://cloudimagemanager.web.app).
 
 ## Features
 
