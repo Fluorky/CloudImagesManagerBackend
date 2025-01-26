@@ -35,6 +35,10 @@ def landsat_cron(req: https_fn.Request) -> https_fn.Response:
         saved_images = []
         saved_metadata = []
 
+        # Create empty collection `landsat_metadata_changed` in Firestore if it does not exist
+        if not firestore_client.collection("landsat_metadata_changed").document("placeholder").get().exists:
+            firestore_client.collection("landsat_metadata_changed").document("placeholder").set({})
+
         images = collection.toList(image_count)
         for i in range(image_count):
             image = ee.Image(images.get(i))
