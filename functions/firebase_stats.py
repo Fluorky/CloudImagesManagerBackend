@@ -1,9 +1,10 @@
 import os
-from firebase_functions import https_fn
 from google.cloud import monitoring_v3, storage
 import datetime
 import json
 from dotenv import load_dotenv
+from flask_cors import cross_origin
+from firebase_functions import https_fn
 
 # Load environment variables
 load_dotenv()
@@ -17,17 +18,9 @@ BUCKET_NAME = os.getenv("BUCKET_NAME")
 
 
 @https_fn.on_request()
+@cross_origin(origins="*")
 def get_firebase_stats(request: https_fn.Request) -> https_fn.Response:
     try:
-        # Handle CORS preflight request
-        if request.method == "OPTIONS":
-            headers = {
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "POST, OPTIONS",
-                "Access-Control-Allow-Headers": "Content-Type",
-            }
-            return https_fn.Response("", status=204, headers=headers)
-
         if not BUCKET_NAME or not PROJECT_ID:
             return https_fn.Response(
                 json.dumps({"error": "Bucket name or project ID is not configured in .env"}),
@@ -157,27 +150,14 @@ def get_firebase_stats(request: https_fn.Request) -> https_fn.Response:
             },
         }
 
-        headers = {
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "POST, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type",
-        }
-
         return https_fn.Response(
             json.dumps(response_data),
             status=200,
             mimetype="application/json",
-            headers=headers,
         )
     except Exception as e:
-        headers = {
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "POST, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type",
-        }
         return https_fn.Response(
             json.dumps({"error": f"Unexpected error: {str(e)}"}),
             status=500,
             mimetype="application/json",
-            headers=headers,
         )
