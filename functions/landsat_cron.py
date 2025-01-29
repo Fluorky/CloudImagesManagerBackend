@@ -47,7 +47,7 @@ def landsat_cron(req: https_fn.Request) -> https_fn.Response:
 
             properties = flatten_data(raw_metadata.get("properties", {}))
             metadata = {
-                "type": "Image",
+                "type": "Image/png",
                 "id": image_id,
                 "location": {"coordinates": region_coordinates, "region_radius": region_radius},
                 "properties": properties,
@@ -57,7 +57,7 @@ def landsat_cron(req: https_fn.Request) -> https_fn.Response:
             saved_metadata.append(image_id)
 
             vis_params = {"min": 0.0, "max": 0.4, "bands": ["B4", "B3", "B2"]}
-            url = image.getThumbURL({"region": region, "dimensions": 512, "format": "png", **vis_params})
+            url = image.getThumbURL({"region": region, "format": "png", **vis_params})
             response = requests.get(url)
             response.raise_for_status()
 
