@@ -19,10 +19,55 @@ BUCKET_NAME = os.getenv("BUCKET_NAME")
 @https_fn.on_request()
 def get_firebase_stats(request: https_fn.Request) -> https_fn.Response:
     try:
+        # Handle CORS preflight request
+        if request.method == "OPTIONS":
+            headers = {
+                "Access-Control-Allow-Origin": "https://cloudimagemanager-4c98f.firebaseapp.com",
+                "Access-Control-Allow-Methods": "POST, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type",
+            }
+            return https_fn.Response("", status=204, headers=headers)
+
         if not BUCKET_NAME or not PROJECT_ID:
             return https_fn.Response(
                 json.dumps({"error": "Bucket name or project ID is not configured in .env"}),
                 status=500,
+                mimetype="application/json",
+            )
+
+        # Parse start_date and end_date from POST body
+        try:
+            request_json = request.get_json(silent=True)
+            if request_json is None:
+                return https_fn.Response(
+                    json.dumps({"error": "Request body must be in JSON format."}),
+                    status=400,
+                    mimetype="application/json",
+                )
+
+            start_date_str = request_json.get("start_date")
+            end_date_str = request_json.get("end_date")
+
+            # If no parameters provided, use the default: today and 30 days prior
+            if not start_date_str or not end_date_str:
+                end_date = datetime.datetime.utcnow()
+                start_date = end_date - datetime.timedelta(days=30)
+            else:
+                # Convert provided dates to datetime objects
+                start_date = datetime.datetime.strptime(start_date_str, "%Y-%m-%d")
+                end_date = datetime.datetime.strptime(end_date_str, "%Y-%m-%d")
+
+            # Ensure start_date is earlier than end_date
+            if start_date >= end_date:
+                return https_fn.Response(
+                    json.dumps({"error": "start_date must be earlier than end_date."}),
+                    status=400,
+                    mimetype="application/json",
+                )
+        except ValueError:
+            return https_fn.Response(
+                json.dumps({"error": "Invalid date format. Use YYYY-MM-DD."}),
+                status=400,
                 mimetype="application/json",
             )
 
@@ -35,11 +80,10 @@ def get_firebase_stats(request: https_fn.Request) -> https_fn.Response:
 
         # Fetch Firestore metrics using Monitoring API
         client = monitoring_v3.MetricServiceClient()
-        now = datetime.datetime.utcnow()
         interval = monitoring_v3.TimeInterval(
             {
-                "start_time": {"seconds": int((now - datetime.timedelta(days=30)).timestamp())},
-                "end_time": {"seconds": int(now.timestamp())},
+                "start_time": {"seconds": int(start_date.timestamp())},
+                "end_time": {"seconds": int(end_date.timestamp())},
             }
         )
 
@@ -106,22 +150,34 @@ def get_firebase_stats(request: https_fn.Request) -> https_fn.Response:
             },
             "firestore": {
                 "total_reads": firestore_reads,
-
             },
-            "firebase":{
+            "firebase": {
                 "average_request_latency_ms": round(avg_latency, 2),
                 "total_request_count": request_count,
-            }
+            },
+        }
+
+        headers = {
+            "Access-Control-Allow-Origin": "https://cloudimagemanager-4c98f.firebaseapp.com",
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type",
         }
 
         return https_fn.Response(
             json.dumps(response_data),
             status=200,
             mimetype="application/json",
+            headers=headers,
         )
     except Exception as e:
+        headers = {
+            "Access-Control-Allow-Origin": "https://cloudimagemanager-4c98f.firebaseapp.com",
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type",
+        }
         return https_fn.Response(
             json.dumps({"error": f"Unexpected error: {str(e)}"}),
             status=500,
             mimetype="application/json",
+            headers=headers,
         )
