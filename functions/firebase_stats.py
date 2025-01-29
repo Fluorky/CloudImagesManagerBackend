@@ -28,12 +28,12 @@ def get_firebase_stats(request: https_fn.Request) -> https_fn.Response:
 
         # Fetch Firebase Storage stats
         bucket = storage_client.bucket(BUCKET_NAME)
-        blobs = list(bucket.list_blobs())
+        blobs = list(bucket.list_blobs(prefix="landsat_images/"))
 
         total_files = len(blobs)
         total_size = sum(blob.size for blob in blobs if blob.size is not None)
 
-        # Fetch Firestore reads using Monitoring API
+        # Fetch Firestore metrics using Monitoring API
         client = monitoring_v3.MetricServiceClient()
         now = datetime.datetime.utcnow()
         interval = monitoring_v3.TimeInterval(
@@ -42,22 +42,61 @@ def get_firebase_stats(request: https_fn.Request) -> https_fn.Response:
                 "end_time": {"seconds": int(now.timestamp())},
             }
         )
-        filter_query = 'metric.type="firestore.googleapis.com/api/request_count"'
 
+        # Fetch firestore.googleapis.com/document/read_count
         firestore_reads = 0
-        results = client.list_time_series(
+        read_query = 'metric.type="firestore.googleapis.com/document/read_count"'
+        read_results = client.list_time_series(
             request={
                 "name": f"projects/{PROJECT_ID}",
-                "filter": filter_query,
+                "filter": read_query,
                 "interval": interval,
                 "view": monitoring_v3.ListTimeSeriesRequest.TimeSeriesView.FULL,
             }
         )
 
-        if results:
-            for result in results:
+        if read_results:
+            for result in read_results:
                 for point in result.points:
                     firestore_reads += point.value.int64_value
+
+        # Fetch firestore.googleapis.com/api/request_latencies
+        latency_query = 'metric.type="firestore.googleapis.com/api/request_latencies"'
+        request_latencies = []
+        latency_results = client.list_time_series(
+            request={
+                "name": f"projects/{PROJECT_ID}",
+                "filter": latency_query,
+                "interval": interval,
+                "view": monitoring_v3.ListTimeSeriesRequest.TimeSeriesView.FULL,
+            }
+        )
+
+        if latency_results:
+            for result in latency_results:
+                for point in result.points:
+                    request_latencies.append(point.value.double_value)
+
+        avg_latency = (
+            sum(request_latencies) / len(request_latencies) if request_latencies else 0
+        )
+
+        # Fetch firestore.googleapis.com/api/request_count
+        request_count = 0
+        count_query = 'metric.type="firestore.googleapis.com/api/request_count"'
+        count_results = client.list_time_series(
+            request={
+                "name": f"projects/{PROJECT_ID}",
+                "filter": count_query,
+                "interval": interval,
+                "view": monitoring_v3.ListTimeSeriesRequest.TimeSeriesView.FULL,
+            }
+        )
+
+        if count_results:
+            for result in count_results:
+                for point in result.points:
+                    request_count += point.value.int64_value
 
         # Build the response
         response_data = {
@@ -67,7 +106,12 @@ def get_firebase_stats(request: https_fn.Request) -> https_fn.Response:
             },
             "firestore": {
                 "total_reads": firestore_reads,
+
             },
+            "firebase":{
+                "average_request_latency_ms": round(avg_latency, 2),
+                "total_request_count": request_count,
+            }
         }
 
         return https_fn.Response(
