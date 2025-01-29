@@ -22,8 +22,10 @@ def get_scaled_images(request: https_fn.Request) -> https_fn.Response:
     """
     Firebase Function endpoint to fetch all images from Google Cloud Storage,
     scale them to HD resolution (720p), and return a list of the scaled images.
-    If `save_to_storage` is True, the images will be saved back to Firebase Storage.
-    Otherwise, the scaled images are returned as base64 strings.
+
+    1. If `save_to_storage` is True and the image doesn't exist in storage, it will be scaled, saved to storage, and returned as base64.
+    2. If `save_to_storage` is True and the image already exists in storage, it will be retrieved and returned as base64.
+    3. If `save_to_storage` is False, the image will be scaled and returned as base64 without being saved to storage.
     """
     try:
         # Parse the JSON request to get optional parameters
@@ -59,29 +61,43 @@ def get_scaled_images(request: https_fn.Request) -> https_fn.Response:
             if not blob.name.endswith(".png"):
                 continue
 
-            # Download the image data from the bucket
-            image_data = blob.download_as_bytes()
+            # Generate the corresponding scaled image name
+            scaled_blob_name = blob.name.replace("landsat_images/", "scaled_images/")
+            scaled_blob_name = scaled_blob_name.replace(".png", "_hd.png")
+            scaled_blob = bucket.blob(scaled_blob_name)
 
-            # Open the image using Pillow for processing
-            with Image.open(io.BytesIO(image_data)) as img:
-                # Resize the image to HD resolution (1280x720)
-                resolution = (1280, 720)
-                img_resized = img.resize(resolution, Image.Resampling.LANCZOS)
+            if save_to_storage:
+                if scaled_blob.exists():
+                    # Case 2: If the scaled image exists in storage, fetch and return it
+                    scaled_image_data = scaled_blob.download_as_bytes()
+                    scaled_images.append(base64.b64encode(scaled_image_data).decode("utf-8"))
+                else:
+                    # Case 1: Scale, save to storage, and return as base64
+                    image_data = blob.download_as_bytes()
+                    with Image.open(io.BytesIO(image_data)) as img:
+                        resolution = (1280, 720)
+                        img_resized = img.resize(resolution, Image.Resampling.LANCZOS)
 
-                # Save the resized image to an in-memory file
-                output = io.BytesIO()
-                img_resized.save(output, format="PNG")
-                output.seek(0)
+                        output = io.BytesIO()
+                        img_resized.save(output, format="PNG")
+                        output.seek(0)
 
-                if save_to_storage:
-                    # Upload the scaled image back to Cloud Storage
-                    scaled_blob_name = f"scaled_images/{os.path.basename(blob.name)}_hd.png"
-                    scaled_blob = bucket.blob(scaled_blob_name)
-                    scaled_blob.upload_from_file(output, content_type="image/png")
+                        scaled_blob.upload_from_file(output, content_type="image/png")
+                        scaled_images.append(base64.b64encode(output.getvalue()).decode("utf-8"))
+            else:
+                # Case 3: Scale and return as base64 without saving to storage
+                image_data = blob.download_as_bytes()
+                with Image.open(io.BytesIO(image_data)) as img:
+                    resolution = (1280, 720)
+                    img_resized = img.resize(resolution, Image.Resampling.LANCZOS)
 
-                # Append the scaled image data to the list (always return base64)
-                scaled_images.append(base64.b64encode(output.getvalue()).decode("utf-8"))
+                    output = io.BytesIO()
+                    img_resized.save(output, format="PNG")
+                    output.seek(0)
 
+                    scaled_images.append(base64.b64encode(output.getvalue()).decode("utf-8"))
+
+        # Return the scaled images as base64 strings in JSON format
         return https_fn.Response(
             json.dumps({"message": "Images scaled successfully", "scaled_images": scaled_images}),
             status=200,
