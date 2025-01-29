@@ -22,7 +22,7 @@ def get_firebase_stats(request: https_fn.Request) -> https_fn.Response:
         # Handle CORS preflight request
         if request.method == "OPTIONS":
             headers = {
-                "Access-Control-Allow-Origin": "https://cloudimagemanager-4c98f.firebaseapp.com",
+                "Access-Control-Allow-Origin": "*",
                 "Access-Control-Allow-Methods": "POST, OPTIONS",
                 "Access-Control-Allow-Headers": "Content-Type",
             }
@@ -158,7 +158,7 @@ def get_firebase_stats(request: https_fn.Request) -> https_fn.Response:
         }
 
         headers = {
-            "Access-Control-Allow-Origin": "https://cloudimagemanager-4c98f.firebaseapp.com",
+            "Access-Control-Allow-Origin": "*",
             "Access-Control-Allow-Methods": "POST, OPTIONS",
             "Access-Control-Allow-Headers": "Content-Type",
         }
@@ -171,7 +171,7 @@ def get_firebase_stats(request: https_fn.Request) -> https_fn.Response:
         )
     except Exception as e:
         headers = {
-            "Access-Control-Allow-Origin": "https://cloudimagemanager-4c98f.firebaseapp.com",
+            "Access-Control-Allow-Origin": "*",
             "Access-Control-Allow-Methods": "POST, OPTIONS",
             "Access-Control-Allow-Headers": "Content-Type",
         }
