@@ -7,11 +7,15 @@ This is part of [cloud image manager app](https://cloudimagemanager.web.app).
 
 ## Features
 
-- **Satellite Image Processing**: Fetch Landsat satellite images for specific regions.
-- **Firestore Integration**: Save processed metadata directly to Firestore.
-- **Cloud Storage Integration**: Upload processed images and metadata to Google Cloud Storage.
-- **Configuration via `.env`**: Easy environment-based configuration.
-- **Firebase Deployment**: Easily deploy functions using Firebase CLI.
+- **Satellite Image Processing**: Fetch Landsat satellite images for specific regions and process them efficiently.
+- **Automated Image Scaling**: Resize images to HD resolution (720p) for optimized storage and access.
+- **Firestore Integration**: Save processed metadata directly to Firestore for real-time database management.
+- **Cloud Storage Integration**: Upload and manage processed images and metadata in Google Cloud Storage.
+- **Network Traffic Monitoring**: Retrieve and analyze network traffic data for storage usage insights.
+- **Firebase Statistics**: Fetch and analyze Firebase performance metrics.
+- **Configuration via `.env`**: Easy environment-based configuration for custom deployments.
+- **Firebase Deployment**: Easily deploy functions using Firebase CLI with a single command.
+- **Local Testing Support**: Run and debug functions locally using Firebase emulators.
 
 ## Requirements
 
@@ -22,6 +26,26 @@ This is part of [cloud image manager app](https://cloudimagemanager.web.app).
   - Earth Engine APIs enabled
 - Service account credentials for authentication
 - Environment variables defined in a `.env` file
+
+## Project Structure
+```
+CloudImagesManagerBackend/
+│── functions/              # Contains Firebase functions (backend logic)
+│   ├── main.py             # Main function entry point
+│   ├── config.py           # Configuration settings
+│   ├── firebase_stats.py   # Firebase statistics handling
+│   ├── images_blob_information.py # Image processing module
+│   ├── landsat_cron.py     # Landsat image automation
+│   ├── network_information.py # Network information module
+│   ├── scaled_image.py     # Image scaling utility
+│   ├── utils.py            # Helper functions
+│   ├── requirements.txt    # Dependencies for Python
+│── firestore.rules         # Firestore security rules
+│── storage.rules           # Cloud Storage security rules
+│── firebase.json           # Firebase configuration file
+│── .firebaserc             # Firebase project settings
+│── README.md               # Project documentation
+```
 
 ## Installation
 
@@ -86,17 +110,40 @@ Start the emulator locally:
 firebase emulators:start
 ```
 
-### Making API Requests
-The function can be triggered via an HTTP request. Example request body:
-```json
-{
-  "collection": "LANDSAT/LC09/C02/T2_TOA"
-}
+### Available Functions
+
+#### 1. Fetch Firebase Statistics
+**Function:** `get_firebase_stats`
+```bash
+curl -X GET https://REGION-PROJECT_ID.cloudfunctions.net/get_firebase_stats
 ```
 
-Send a POST request to the deployed functions:
+#### 2. Get Total Image Size from Cloud Storage
+**Function:** `get_total_image_size`
 ```bash
-curl -X POST https://REGION-PROJECT_ID.cloudfunctions.net/landsat_cron     -H "Content-Type: application/json"     -d '{"collection": "LANDSAT/LC09/C02/T2_TOA"}'
+curl -X GET "https://REGION-PROJECT_ID.cloudfunctions.net/get_total_image_size?folder=landsat_images/"
+```
+
+#### 3. Fetch Landsat Satellite Images
+**Function:** `landsat_cron`
+```bash
+curl -X POST https://REGION-PROJECT_ID.cloudfunctions.net/landsat_cron \
+     -H "Content-Type: application/json" \
+     -d '{"collection": "LANDSAT/LC09/C02/T2_TOA"}'
+```
+
+#### 4. Fetch Network Traffic Data
+**Function:** `get_network_traffic`
+```bash
+curl -X POST https://REGION-PROJECT_ID.cloudfunctions.net/get_network_traffic \
+     -H "Content-Type: application/json" \
+     -d '{"start_date": "2024-01-01", "end_date": "2024-02-01"}'
+```
+
+#### 5. Scale Images to HD Resolution (720p)
+**Function:** `get_scaled_images`
+```bash
+curl -X GET https://REGION-PROJECT_ID.cloudfunctions.net/get_scaled_images
 ```
 
 ### Workflow
@@ -116,6 +163,11 @@ The `CONFIG_PATH` file in your bucket should look like this:
 
 ## Contributing
 Contributions are welcome! Fork this repository and submit a pull request.
+1. Fork the repository.
+2. Create a feature branch (`git checkout -b feature-name`).
+3. Commit your changes (`git commit -m "Add new feature"`).
+4. Push to the branch (`git push origin feature-name`).
+5. Create a Pull Request.
 
 ## License
 This project is licensed under the MIT License.
