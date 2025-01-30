@@ -101,6 +101,11 @@ CloudImagesManagerBackend/
 Ensure your `.env` file is properly set up:
 - **BUCKET_NAME**: Name of the Cloud Storage bucket where images and metadata will be stored.
 - **CONFIG_PATH**: Path to the configuration file in the bucket, defining the region and radius.
+- **PROJECT_ID**: Firebase project ID used for database and function hosting.
+- **USGS_API_KEY**: API key required for fetching satellite images from USGS.
+- **COLLECTION_NAME_DEFAULT**: Default satellite image collection (e.g., LANDSAT/LC09/C02/T2_TOA).
+- **FIRESTORE_EMULATOR_HOST**: Set this to `localhost:8080` for local Firestore testing.
+- **STORAGE_EMULATOR_HOST**: Set this to `http://localhost:9090` for local Cloud Storage testing.
 
 ### Testing Locally
 To test the function locally, set the `FIRESTORE_EMULATOR_HOST` and `STORAGE_EMULATOR_HOST` environment variables to use Firebase and Cloud Storage emulators.
