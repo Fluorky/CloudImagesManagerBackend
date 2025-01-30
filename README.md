@@ -1,7 +1,8 @@
 
-# CloudImageBatcher
+# CloudImageManager
 
-CloudImageBatcher automates the processing of satellite images using Google Cloud Functions, integrating with Google Earth Engine, Firestore, and Cloud Storage. The tool simplifies the workflow of fetching, processing, and saving image metadata, ensuring scalability and efficiency.
+CloudImageManager automates the processing of satellite images using Google Cloud Functions, integrating with Google Earth Engine, Firestore, and Cloud Storage. The tool simplifies the workflow of fetching, processing, and saving image metadata, ensuring scalability and efficiency.
+This backend enabling efficient and automated image management, getting information about network, stored data and cloud storage.
 This is part of [cloud image manager app](https://cloudimagemanager.web.app).
 
 ## Features
@@ -26,8 +27,8 @@ This is part of [cloud image manager app](https://cloudimagemanager.web.app).
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/Fluorky/CloudImageBatcher.git
-   cd CloudImageBatcher/functions
+   git clone https://github.com/Fluorky/CloudImageManager.git
+   cd CloudImageManager/functions
    ```
 
 2. Install dependencies:
@@ -44,8 +45,11 @@ This is part of [cloud image manager app](https://cloudimagemanager.web.app).
 
 5. Create a `.env` file in the `functions` directory with the following structure:
    ```env
+   USGS_API_KEY = usgs_api_key
+   COLLECTION_NAME_DEFAULT=your_landsat_collection_name
    BUCKET_NAME=your_cloud_storage_bucket
    CONFIG_PATH=path_to_config_in_bucket.json
+   PROJECT_ID=your_cloud_project_name
    FIRESTORE_EMULATOR_HOST=localhost:8080  # Optional: For local debugging
    STORAGE_EMULATOR_HOST=http://localhost:9090  # Optional: For local debugging
    ```
@@ -60,6 +64,11 @@ This is part of [cloud image manager app](https://cloudimagemanager.web.app).
 2. Deploy the function:
    ```bash
    firebase deploy --only functions
+   ```
+
+3. Deployment:
+   ```bash
+   firebase deploy
    ```
 
 ## Usage
@@ -85,7 +94,7 @@ The function can be triggered via an HTTP request. Example request body:
 }
 ```
 
-Send a POST request to the deployed function:
+Send a POST request to the deployed functions:
 ```bash
 curl -X POST https://REGION-PROJECT_ID.cloudfunctions.net/landsat_cron     -H "Content-Type: application/json"     -d '{"collection": "LANDSAT/LC09/C02/T2_TOA"}'
 ```
